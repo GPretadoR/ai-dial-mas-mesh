@@ -13,17 +13,43 @@ from task.tools.deployment.web_search_agent_tool import WebSearchAgentTool
 from task.utils.constants import DIAL_ENDPOINT, DEPLOYMENT_NAME
 
 
-#TODO:
-# 1. Create CalculationsApplication class and extend ChatCompletion
-# 2. As a tools for CalculationsAgent you need to provide:
-#   - SimpleCalculatorTool
-#   - PythonCodeInterpreterTool
-#   - ContentManagementAgentTool (MAS Mesh)
-#   - WebSearchAgentTool (MAS Mesh)
-# 3. Override the chat_completion method of ChatCompletion, create Choice and call CalculationsAgent
-# ---
-# 4. Create DIALApp with deployment_name `calculations-agent` (the same as in the core config) and impl is instance of
-#    the CalculationsApplication
-# 5. Add starter with DIALApp, port is 5001 (see core config)
+class CalculationsApplication(ChatCompletion):
+    
+    async def chat_completion(self, request: Request, response: Response) -> None:
+        # Prepare tools
+        tools: list[BaseTool] = [
+            SimpleCalculatorTool(),
+            PythonCodeInterpreterTool(),
+            ContentManagementAgentTool(endpoint=DIAL_ENDPOINT),
+            WebSearchAgentTool(endpoint=DIAL_ENDPOINT)
+        ]
+        
+        # Create agent
+        agent = CalculationsAgent(
+            endpoint=DIAL_ENDPOINT,
+            tools=tools
+        )
+        
+        # Create choice
+        choice = response.create_single_choice()
+        
+        # Handle request
+        await agent.handle_request(
+            deployment_name=DEPLOYMENT_NAME,
+            choice=choice,
+            request=request,
+            response=response
+        )
 
-raise NotImplementedError()
+
+# Create DIAL app
+app = DIALApp(
+    description="Calculations Agent Application",
+    add_healthcheck=True,
+)
+
+app.add_chat_completion("calculations-agent", CalculationsApplication())
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=5001)
